@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.aftersale import ApprovalTask, Refund
 
+ACTIVE_REFUND_STATUSES = {"PENDING_REVIEW", "APPROVED"}
+
 
 class RefundRepository:
     def __init__(self, session: AsyncSession):
@@ -16,6 +18,14 @@ class RefundRepository:
 
     async def get_by_id(self, refund_id: int) -> Refund | None:
         return await self.session.get(Refund, refund_id)
+
+    async def has_active_refund_for_order(self, order_id: int) -> bool:
+        q = select(Refund.id).where(
+            Refund.order_id == order_id,
+            Refund.status.in_(ACTIVE_REFUND_STATUSES),
+        )
+        result = await self.session.execute(q)
+        return result.scalar_one_or_none() is not None
 
     async def list_approvals(self, status: str | None = None) -> list[ApprovalTask]:
         q = select(ApprovalTask).order_by(ApprovalTask.created_at.desc())

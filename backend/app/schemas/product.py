@@ -1,9 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProductSearchRequest(BaseModel):
     keyword: str | None = None
-    budget: float | None = None
+    budget: float | None = Field(default=None, ge=0)
     category: str | None = None
 
 

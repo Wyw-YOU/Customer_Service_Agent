@@ -16,12 +16,17 @@ class ApprovalService:
         task = await self.refund_repo.get_approval(approval_id)
         if not task:
             raise ValueError("Approval task not found")
+        if task.type != "REFUND":
+            raise ValueError("Unsupported approval task type")
+        if task.status != "PENDING":
+            raise ValueError("Approval task already processed")
         task.status = "APPROVED"
         task.operator_id = operator_id
 
         refund = await self.refund_repo.get_by_id(task.target_id)
-        if refund:
-            refund.status = "APPROVED"
+        if not refund:
+            raise ValueError("Refund not found")
+        refund.status = "APPROVED"
 
         return {"id": task.id, "status": task.status}
 
@@ -29,12 +34,17 @@ class ApprovalService:
         task = await self.refund_repo.get_approval(approval_id)
         if not task:
             raise ValueError("Approval task not found")
+        if task.type != "REFUND":
+            raise ValueError("Unsupported approval task type")
+        if task.status != "PENDING":
+            raise ValueError("Approval task already processed")
         task.status = "REJECTED"
         task.operator_id = operator_id
 
         refund = await self.refund_repo.get_by_id(task.target_id)
-        if refund:
-            refund.status = "REJECTED"
+        if not refund:
+            raise ValueError("Refund not found")
+        refund.status = "REJECTED"
 
         return {"id": task.id, "status": task.status}
 

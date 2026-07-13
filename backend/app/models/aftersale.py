@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, utcnow
@@ -13,6 +13,14 @@ class Refund(Base, TimestampMixin):
     reason: Mapped[str] = mapped_column(Text)
     amount: Mapped[float] = mapped_column(Float)
     status: Mapped[str] = mapped_column(String(32), default="PENDING_REVIEW")
+
+
+Index(
+    "ix_refunds_one_active_per_order",
+    Refund.order_id,
+    unique=True,
+    postgresql_where=Refund.status.in_(["PENDING_REVIEW", "APPROVED"]),
+)
 
 
 class ApprovalTask(Base, TimestampMixin):

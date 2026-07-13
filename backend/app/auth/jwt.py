@@ -4,7 +4,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
+from app.config.database import get_db
 from app.config.settings import settings
+from app.repositories.user_repository import UserRepository
 
 security = HTTPBearer(auto_error=False)
 
@@ -26,10 +28,21 @@ def decode_access_token(token: str) -> dict:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db=Depends(get_db),
 ) -> dict:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    return decode_access_token(credentials.credentials)
+    payload = decode_access_token(credentials.credentials)
+    user_id = payload.get("sub")
+    if user_id is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    repo = UserRepository(db)
+    user = await repo.get_by_id(int(user_id))
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
+    payload["role"] = user.role
+    return payload
 
 
 def require_role(min_role: str):

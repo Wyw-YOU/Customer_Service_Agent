@@ -49,7 +49,8 @@ async def approve(
     try:
         return await service.approve(approval_id, int(user["sub"]))
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        status_code = 404 if "not found" in str(e).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(e))
 
 
 @router.post("/approvals/{approval_id}/reject")
@@ -62,4 +63,5 @@ async def reject(
     try:
         return await service.reject(approval_id, int(user["sub"]))
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        status_code = 404 if "not found" in str(e).lower() else 400
+        raise HTTPException(status_code=status_code, detail=str(e))

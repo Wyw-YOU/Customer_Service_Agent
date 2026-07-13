@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth.jwt import get_current_user
 from app.config.database import get_db
@@ -15,4 +15,9 @@ async def chat(
     db=Depends(get_db),
 ):
     service = AgentService(db)
-    return await service.chat(user_id=int(user["sub"]), request=request)
+    try:
+        return await service.chat(user_id=int(user["sub"]), request=request)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

@@ -15,10 +15,10 @@ class Settings(BaseSettings):
     # LLM
     llm_api_key: str = ""
     llm_base_url: str = "https://api.deepseek.com/v1"
-    llm_model: str = "deepseek-chat"
+    llm_model: str = "deepseek-v4-flash"
 
-    # Embedding
-    embedding_model: str = "text-embedding-3-small"
+    # Embedding (local sentence-transformers model)
+    embedding_model: str = "all-MiniLM-L6-v2"
 
     # JWT
     jwt_secret: str = "change-me"

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, chat, order, product, user
+from app.api import admin, chat, knowledge, order, product, user
 from app.config.database import close_db, init_db
 from app.config.settings import settings
 from app.middleware.logging import ExceptionMiddleware, LoggingMiddleware
@@ -40,6 +40,7 @@ app.include_router(user.router)
 app.include_router(product.router)
 app.include_router(order.router)
 app.include_router(chat.router)
+app.include_router(knowledge.router)
 app.include_router(admin.router)
 
 

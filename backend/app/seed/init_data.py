@@ -323,11 +323,13 @@ async def seed():
         await session.flush()
 
         # ── Knowledge Documents ──
+        doc_objs = []
         for kd in KNOWLEDGE_DOCUMENTS:
             doc = KnowledgeDocument(
                 name=kd["name"], type=kd["type"], version="v1.0", status="INDEXED",
             )
             session.add(doc)
+            doc_objs.append(doc)
             await session.flush()
             # Split content into chunks
             paragraphs = [p.strip() for p in kd["content"].split("\n\n") if p.strip()]
@@ -339,6 +341,45 @@ async def seed():
                     meta={"source": kd["name"], "type": kd["type"]},
                 ))
         await session.flush()
+
+        # ── Index Knowledge into Qdrant ──
+        print("Indexing knowledge documents into Qdrant...")
+        try:
+            from app.rag.chunker import TextChunker
+            from app.rag.embedding import EmbeddingClient
+            from app.rag.vectorstore import VectorStore
+
+            chunker = TextChunker()
+            emb_client = EmbeddingClient()
+            vectorstore = VectorStore()
+            vectorstore.ensure_collection()
+
+            qdrant_points = []
+            for kd, dobj in zip(KNOWLEDGE_DOCUMENTS, doc_objs):
+                chunks = chunker.chunk(kd["content"])
+                if not chunks:
+                    continue
+                vectors = await emb_client.embed(chunks)
+                for ci, (chunk_text, vector) in enumerate(zip(chunks, vectors)):
+                    qdrant_points.append({
+                        "id": f"{dobj.id}_chunk_{ci}",
+                        "vector": vector,
+                        "payload": {
+                            "chunk_id": f"{dobj.id}_chunk_{ci}",
+                            "content": chunk_text,
+                            "document_id": dobj.id,
+                            "document_name": kd["name"],
+                            "doc_type": kd["type"],
+                        },
+                    })
+
+            if qdrant_points:
+                vectorstore.upsert(qdrant_points)
+                print(f"  Qdrant: {len(qdrant_points)} chunks indexed across {len(KNOWLEDGE_DOCUMENTS)} documents")
+            else:
+                print("  Qdrant: no chunks to index")
+        except Exception as e:
+            print(f"  Qdrant indexing skipped (error: {e})")
 
         # ── Conversations (sample) ──
         sample_convos = [

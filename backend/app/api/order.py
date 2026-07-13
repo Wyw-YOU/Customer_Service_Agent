@@ -32,4 +32,14 @@ async def create_refund(request: RefundRequest, user: dict = Depends(get_current
         raise HTTPException(status_code=404, detail="Order not found")
 
     service = RefundService(db)
-    return await service.create_refund(request.order_id, int(user["sub"]), request.reason, order.total_amount)
+    try:
+        return await service.create_refund(
+            request.order_id,
+            int(user["sub"]),
+            request.reason,
+            order.total_amount,
+            order.status,
+            order.payment_status,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
