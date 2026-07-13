@@ -2,100 +2,70 @@
 
 ## Current Status
 
-`deployment/docker-compose.yml` is a target deployment draft. It is not yet a
-verified one-command startup file.
+`deployment/docker-compose.yml` is kept under `deployment/`, so every relative
+path in the file is resolved from that directory. The previous path issue has
+been fixed by pointing services back to the repository root where needed.
 
-Known blockers:
+Current service paths:
 
-- `frontend/` does not exist yet, but the compose file still defines a
-  `frontend` service.
-- `nginx` depends on `frontend`, so full reverse-proxy startup is blocked too.
-- Docker Compose resolves relative paths from the compose file directory. With
-  `-f deployment/docker-compose.yml`, paths such as `./backend/.env` resolve to
-  `deployment/backend/.env`, not `backend/.env` at the repository root.
+- `backend.build`: `../backend`
+- `backend.env_file`: `../backend/.env`
+- `frontend.build.context`: `../frontend`
+- `nginx.build`: `./nginx`
 
-## Why The Current Path Fails
-
-From the repository root, this command:
+The configuration has been validated with:
 
 ```bash
-docker compose -f deployment/docker-compose.yml config
+docker compose -f deployment/docker-compose.yml config --quiet
 ```
 
-loads `deployment/docker-compose.yml`. Relative paths inside that file are then
-resolved relative to `deployment/`.
+This proves the Compose file can be parsed and that build/env paths resolve.
+It does not prove the full stack is healthy yet.
 
-Current examples:
+## How To Run
 
-```yaml
-backend:
-  build: ./backend
-  env_file:
-    - ./backend/.env
-frontend:
-  build: ./frontend
-nginx:
-  build: ./deployment/nginx
+Prepare backend environment variables first:
+
+```bash
+copy backend\.env.example backend\.env
 ```
 
-These resolve as:
+Then validate from the repository root:
 
-```text
-deployment/backend
-deployment/backend/.env
-deployment/frontend
-deployment/deployment/nginx
+```bash
+docker compose -f deployment\docker-compose.yml config --quiet
 ```
 
-Those paths do not match the current repository layout.
+Start the stack after validation:
 
-## Recommended Fix Options
-
-Choose one direction before using Compose as a release path.
-
-### Option A: Move Compose To Repository Root
-
-Create a root-level `docker-compose.yml` and keep paths simple:
-
-```yaml
-backend:
-  build: ./backend
-  env_file:
-    - ./backend/.env
-nginx:
-  build: ./deployment/nginx
+```bash
+docker compose -f deployment\docker-compose.yml up -d --build
 ```
 
-Only add `frontend` after `frontend/` exists.
+Check services:
 
-### Option B: Keep Compose Under `deployment/`
-
-Use paths relative to `deployment/`:
-
-```yaml
-backend:
-  build: ../backend
-  env_file:
-    - ../backend/.env
-nginx:
-  build: ./nginx
+```bash
+docker compose -f deployment\docker-compose.yml ps
+curl http://localhost:8000/health
+curl http://localhost:3000/chat
 ```
 
-Only add `frontend` after `../frontend` exists.
+## Container Environment Notes
 
-## Current Backend-Only Recommendation
+- `backend.env_file` still reads `backend/.env` for secrets such as LLM keys.
+- Container-only connection values are overridden in Compose:
+  - `DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/mall_agent`
+  - `DATABASE_URL_SYNC=postgresql+psycopg2://postgres:postgres@postgres:5432/mall_agent`
+  - `REDIS_URL=redis://redis:6379/0`
+  - `QDRANT_URL=http://qdrant:6333`
+- The frontend build receives `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`.
 
-Until `frontend/` is implemented, validate the backend with local services or a
-temporary backend-only compose file containing:
+## Remaining Release Checks
 
-- `backend`
-- `postgres`
-- `redis`
-- `qdrant`
+Do not mark full one-command startup as passing until:
 
-Do not mark full Docker Compose startup as passing until:
-
-- `docker compose config` returns 0.
-- No `env file not found` error appears.
-- No missing `frontend` build path appears.
+- `docker compose -f deployment\docker-compose.yml up -d --build` succeeds.
+- `docker compose -f deployment\docker-compose.yml ps` shows core services running.
 - `/health` returns 200 after startup.
+- `http://localhost:3000/chat` is reachable.
+- nginx proxy behavior is verified if port 80 is used.

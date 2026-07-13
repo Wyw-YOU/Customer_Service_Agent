@@ -1,8 +1,13 @@
 services:
   frontend:
-    build: ./frontend
+    build:
+      context: ../frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000"
     ports:
       - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000"
     depends_on:
       - backend
     networks:
@@ -10,11 +15,16 @@ services:
     restart: unless-stopped
 
   backend:
-    build: ./backend
+    build: ../backend
     ports:
       - "8000:8000"
     env_file:
-      - ./backend/.env
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/mall_agent
+      DATABASE_URL_SYNC: postgresql+psycopg2://postgres:postgres@postgres:5432/mall_agent
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,7 +77,7 @@ services:
     restart: unless-stopped
 
   nginx:
-    build: ./deployment/nginx
+    build: ./nginx
     ports:
       - "80:80"
     depends_on:

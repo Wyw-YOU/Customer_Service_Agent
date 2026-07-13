@@ -12,6 +12,8 @@ venv/
 node_modules/
 .next/
 out/
+.npm-cache/
+*.tsbuildinfo
 
 # Env
 .env
@@ -35,3 +37,6 @@ Thumbs.db
 开发文档/
 项目跟踪/
 开发周期/
+
+.pytest_cache/
+backend/.pytest_cache/

@@ -10,7 +10,7 @@
 - **Human-in-the-loop Approval** — 敏感操作人工审批流程
 - **Agent Trace** — 全链路执行追踪与调试
 - **Offline Evaluation** — 离线评估脚本和报告
-- **Docker Compose Target** — 已有目标配置，当前仍需修正路径并补齐前端后才能完整一键启动
+- **Docker Compose Target** — Compose 路径已修正并通过配置校验，完整容器启动仍待实机验证
 
 ## 技术栈
 
@@ -20,7 +20,7 @@
 | LLM | OpenAI Compatible API (DeepSeek / Qwen) |
 | RAG | Qdrant + Embedding + Hybrid Search |
 | Backend | FastAPI + SQLAlchemy + Pydantic |
-| Frontend | Next.js + React + Tailwind CSS |
+| Frontend | Next.js + React + CSS |
 | Database | PostgreSQL + Redis |
 | Deployment | Docker Compose + Nginx |
 
@@ -53,15 +53,28 @@ python -m venv .venv
 
 ### Docker Compose 状态
 
-当前 `deployment/docker-compose.yml` 仍是目标部署配置，不是已验证的一键启动入口。
+`deployment/docker-compose.yml` 已按当前仓库结构修正路径：
 
-已知阻塞：
+- backend build context：`../backend`
+- backend env file：`../backend/.env`
+- frontend build context：`../frontend`
+- nginx build context：`./nginx`
 
-- `frontend/` 尚未实现，但 Compose 中仍声明 frontend 服务。
-- Compose 文件位于 `deployment/`，其中 `./backend/.env`、`./frontend` 等相对路径会按 `deployment/` 目录解析，导致路径错误。
-- 完整 Compose 启动前需要先修正路径，或提供 backend-only compose 文件。
+已通过 `docker compose -f deployment\docker-compose.yml config --quiet` 配置校验。完整 `docker compose up -d`、镜像构建和服务健康检查仍需在目标机器上执行后才能标记为一键启动通过。详见 `deployment/README.md`。
 
-详见 `deployment/README.md`。
+### 前端 Chat 页面
+
+```bash
+cd Customer_Service_Agent/frontend
+npm.cmd install
+npm.cmd run dev
+```
+
+访问：
+
+- Chat：`http://localhost:3000/chat`
+
+默认 API 地址为 `http://localhost:8000`，可通过 `NEXT_PUBLIC_API_BASE_URL` 覆盖。
 
 ## 项目结构
 
@@ -76,7 +89,7 @@ AI-Digital-Mall-Agent/
 │       ├── rag/
 │       ├── tools/
 │       └── services/
-├── frontend/       # Planned
+├── frontend/
 ├── evaluation/
 │   ├── datasets/
 │   ├── metrics/
