@@ -10,7 +10,7 @@
 - **Human-in-the-loop Approval** — 敏感操作人工审批流程
 - **Agent Trace** — 全链路执行追踪与调试
 - **Offline Evaluation** — 离线评估脚本和报告
-- **Docker Compose Quick Start** — 一键启动完整环境
+- **Docker Compose Target** — 已有目标配置，当前仍需修正路径并补齐前端后才能完整一键启动
 
 ## 技术栈
 
@@ -32,19 +32,36 @@
 - Python 3.12+
 - Node.js 20 LTS
 
-### 启动
+### 后端本地启动
 
 ```bash
 git clone <repo-url>
-cd AI-Digital-Mall-Agent
+cd Customer_Service_Agent/backend
 
-cp .env.example .env
-# 编辑 .env 填写 LLM API Key
+copy .env.example .env
+# 编辑 backend/.env 填写数据库、Qdrant、Redis、LLM、JWT 配置
 
-docker compose up -d
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-访问 `http://localhost`
+访问：
+
+- API Health：`http://localhost:8000/health`
+- Swagger：`http://localhost:8000/docs`
+
+### Docker Compose 状态
+
+当前 `deployment/docker-compose.yml` 仍是目标部署配置，不是已验证的一键启动入口。
+
+已知阻塞：
+
+- `frontend/` 尚未实现，但 Compose 中仍声明 frontend 服务。
+- Compose 文件位于 `deployment/`，其中 `./backend/.env`、`./frontend` 等相对路径会按 `deployment/` 目录解析，导致路径错误。
+- 完整 Compose 启动前需要先修正路径，或提供 backend-only compose 文件。
+
+详见 `deployment/README.md`。
 
 ## 项目结构
 
@@ -59,7 +76,7 @@ AI-Digital-Mall-Agent/
 │       ├── rag/
 │       ├── tools/
 │       └── services/
-├── frontend/
+├── frontend/       # Planned
 ├── evaluation/
 │   ├── datasets/
 │   ├── metrics/
