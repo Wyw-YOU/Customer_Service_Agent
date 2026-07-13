@@ -4,17 +4,15 @@ import {
   AlertCircle,
   Bot,
   CheckCircle2,
-  LogIn,
-  LogOut,
   MessageSquareText,
   Plus,
   Send,
-  Sparkles,
   UserRound,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
-import { login, sendChatMessage } from "@/services/api";
+import { AppShell } from "@/app/components/AppShell";
+import { sendChatMessage } from "@/services/api";
 
 type Message = {
   id: string;
@@ -32,23 +30,15 @@ const quickPrompts = [
 ];
 
 export default function ChatPage() {
-  const [token, setToken] = useState("");
-  const [username, setUsername] = useState("zhangsan");
-  const [password, setPassword] = useState("user123");
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
-  const [loginLoading, setLoginLoading] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const [error, setError] = useState("");
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const savedToken = window.localStorage.getItem("agent_token");
     const savedConversationId = window.localStorage.getItem("agent_conversation_id");
-    if (savedToken) {
-      setToken(savedToken);
-    }
     if (savedConversationId) {
       setConversationId(Number(savedConversationId));
     }
@@ -58,41 +48,12 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, chatLoading]);
 
-  const isAuthed = Boolean(token);
-  const sessionLabel = useMemo(() => {
-    if (!isAuthed) {
-      return "待登录";
-    }
-    return conversationId ? `会话 #${conversationId}` : "新会话";
-  }, [conversationId, isAuthed]);
+  const sessionLabel = useMemo(() => (conversationId ? `会话 #${conversationId}` : "新会话"), [conversationId]);
 
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setLoginLoading(true);
-    try {
-      const result = await login(username.trim(), password);
-      setToken(result.access_token);
-      window.localStorage.setItem("agent_token", result.access_token);
-    } catch (exc) {
-      setError(exc instanceof Error ? exc.message : "登录失败");
-    } finally {
-      setLoginLoading(false);
-    }
-  }
-
-  function handleLogout() {
-    setToken("");
-    setConversationId(null);
-    setMessages([]);
-    window.localStorage.removeItem("agent_token");
-    window.localStorage.removeItem("agent_conversation_id");
-  }
-
-  async function handleSend(event?: FormEvent<HTMLFormElement>) {
+  async function handleSend(token: string, event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     const text = draft.trim();
-    if (!text || !token || chatLoading) {
+    if (!text || chatLoading) {
       return;
     }
 
@@ -136,89 +97,39 @@ export default function ChatPage() {
   }
 
   return (
-    <main className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brandMark">
-            <Sparkles size={18} />
-          </div>
-          <div>
-            <h1>Digital Mall Agent</h1>
-            <p>{sessionLabel}</p>
-          </div>
-        </div>
+    <AppShell
+      active="chat"
+      eyebrow="AI 客服工作台"
+      title="Chat"
+      sidebarExtra={({ isAuthed }) => (
+        <>
+          <section className="sideSection">
+            <div className="sectionHeader withIcon">
+              <MessageSquareText size={16} />
+              <span>常用请求</span>
+            </div>
+            <div className="quickList">
+              {quickPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => setDraft(prompt)}
+                  disabled={!isAuthed}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </section>
 
-        <section className="sideSection">
-          <div className="sectionHeader">登录身份</div>
-          <form className="loginPanel" onSubmit={handleLogin}>
-            <label>
-              <span>账号</span>
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                autoComplete="username"
-              />
-            </label>
-            <label>
-              <span>密码</span>
-              <input
-                value={password}
-                type="password"
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-              />
-            </label>
-            {isAuthed ? (
-              <button className="secondaryButton" type="button" onClick={handleLogout}>
-                <LogOut size={16} />
-                退出登录
-              </button>
-            ) : (
-              <button type="submit" disabled={loginLoading}>
-                <LogIn size={16} />
-                {loginLoading ? "登录中" : "登录"}
-              </button>
-            )}
-          </form>
-        </section>
-
-        <section className="sideSection">
-          <div className="sectionHeader withIcon">
-            <MessageSquareText size={16} />
-            <span>常用请求</span>
-          </div>
-          <div className="quickList">
-            {quickPrompts.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                onClick={() => setDraft(prompt)}
-                disabled={!isAuthed}
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <button className="newChatButton" type="button" onClick={startNewConversation}>
-          <Plus size={16} />
-          新会话
-        </button>
-      </aside>
-
-      <section className="workspace">
-        <header className="topbar">
-          <div>
-            <span className="eyebrow">AI 客服工作台</span>
-            <h2>Chat</h2>
-          </div>
-          <div className={isAuthed ? "statusPill active" : "statusPill"}>
-            <span />
-            {isAuthed ? "已连接" : "待登录"}
-          </div>
-        </header>
-
+          <button className="newChatButton" type="button" onClick={startNewConversation} disabled={!isAuthed}>
+            <Plus size={16} />
+            新会话
+          </button>
+        </>
+      )}
+    >
+      {({ token, isAuthed }) => (
         <div className="chatFrame">
           <div className="chatHeader">
             <div>
@@ -245,7 +156,7 @@ export default function ChatPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          <form className="composer" onSubmit={handleSend}>
+          <form className="composer" onSubmit={(event) => handleSend(token, event)}>
             <textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
@@ -259,8 +170,8 @@ export default function ChatPage() {
             </button>
           </form>
         </div>
-      </section>
-    </main>
+      )}
+    </AppShell>
   );
 }
 

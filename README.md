@@ -62,7 +62,7 @@ python -m venv .venv
 
 已通过 `docker compose -f deployment\docker-compose.yml config --quiet` 配置校验。完整 `docker compose up -d`、镜像构建和服务健康检查仍需在目标机器上执行后才能标记为一键启动通过。详见 `deployment/README.md`。
 
-### 前端 Chat 页面
+### 前端页面
 
 ```bash
 cd Customer_Service_Agent/frontend
@@ -72,9 +72,12 @@ npm.cmd run dev
 
 访问：
 
+- Login：`http://localhost:3000/login`
 - Chat：`http://localhost:3000/chat`
+- Trace：`http://localhost:3000/admin/traces`
+- Approval：`http://localhost:3000/admin/approvals`
 
-默认 API 地址为 `http://localhost:8000`，可通过 `NEXT_PUBLIC_API_BASE_URL` 覆盖。
+默认 API 地址为 `http://localhost:8000`，可通过 `NEXT_PUBLIC_API_BASE_URL` 覆盖。登录后左侧工作区导航可在 Chat、Trace、Approval 之间切换，侧栏支持折叠，右上角显示当前账号头像、用户 id 和角色。
 
 ## 项目结构
 
