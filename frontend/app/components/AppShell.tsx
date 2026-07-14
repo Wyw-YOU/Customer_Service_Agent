@@ -3,6 +3,8 @@
 import {
   Bot,
   ClipboardCheck,
+  Headset,
+  LayoutDashboard,
   LogIn,
   LogOut,
   MessageSquareText,
@@ -11,7 +13,7 @@ import {
   Route,
   ShieldCheck,
   Sparkles,
-  UserRound,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,7 +31,7 @@ export type AppShellState = {
 };
 
 type AppShellProps = {
-  active: "chat" | "traces" | "approvals";
+  active: "chat" | "dashboard" | "service" | "traces" | "approvals" | "users";
   eyebrow: string;
   title: string;
   requiredRole?: Role;
@@ -43,10 +45,19 @@ const roleLevel: Record<Role, number> = {
   ADMIN: 3,
 };
 
-const navItems = [
-  { href: "/chat", label: "Chat", icon: MessageSquareText, key: "chat" },
-  { href: "/admin/traces", label: "Trace", icon: Route, key: "traces" },
-  { href: "/admin/approvals", label: "Approval", icon: ClipboardCheck, key: "approvals" },
+const navItems: Array<{
+  href: string;
+  label: string;
+  icon: typeof MessageSquareText;
+  key: AppShellProps["active"];
+  minRole: Role;
+}> = [
+  { href: "/chat", label: "用户 Chat", icon: MessageSquareText, key: "chat", minRole: "USER" },
+  { href: "/admin/service", label: "会话工作台", icon: Headset, key: "service", minRole: "CUSTOMER_SERVICE" },
+  { href: "/admin/approvals", label: "退款审批", icon: ClipboardCheck, key: "approvals", minRole: "CUSTOMER_SERVICE" },
+  { href: "/admin", label: "运营概览", icon: LayoutDashboard, key: "dashboard", minRole: "ADMIN" },
+  { href: "/admin/users", label: "客服管理", icon: Users, key: "users", minRole: "ADMIN" },
+  { href: "/admin/traces", label: "Trace 监控", icon: Route, key: "traces", minRole: "ADMIN" },
 ];
 
 export function AppShell({
@@ -64,11 +75,13 @@ export function AppShell({
   const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState("");
   const [checking, setChecking] = useState(true);
+  const loginPath = requiredRole === "USER" ? "/login" : "/admin/login";
 
   useEffect(() => {
     const savedToken = window.localStorage.getItem("agent_token");
     const savedCollapsed = window.localStorage.getItem("agent_sidebar_collapsed");
     setCollapsed(savedCollapsed === "1");
+
     if (!savedToken) {
       setChecking(false);
       return;
@@ -88,8 +101,21 @@ export function AppShell({
       .finally(() => setChecking(false));
   }, []);
 
+  useEffect(() => {
+    function handleAuthExpired() {
+      setToken("");
+      setUser(null);
+      setError("登录已过期，请重新登录。");
+    }
+
+    window.addEventListener("agent-auth-expired", handleAuthExpired);
+    return () => window.removeEventListener("agent-auth-expired", handleAuthExpired);
+  }, []);
+
   const isAuthed = Boolean(token && user);
   const shellState: AppShellState = { token, user, isAuthed, setError };
+  const currentRoleLevel = user ? (roleLevel[user.role as Role] ?? 0) : roleLevel.ADMIN;
+  const visibleNavItems = navItems.filter((item) => currentRoleLevel >= roleLevel[item.minRole]);
   const hasRequiredRole = useMemo(() => {
     if (!user) {
       return false;
@@ -108,7 +134,7 @@ export function AppShell({
     window.localStorage.removeItem("agent_conversation_id");
     setToken("");
     setUser(null);
-    router.push(`/login?next=${encodeURIComponent(pathname)}`);
+    router.push(`${loginPath}?next=${encodeURIComponent(pathname)}`);
   }
 
   return (
@@ -122,17 +148,22 @@ export function AppShell({
             <h1>Digital Mall Agent</h1>
             <p>{user ? `${user.username} · #${user.id}` : "请登录"}</p>
           </div>
-          <button className="iconButton collapseButton" type="button" onClick={toggleSidebar}>
+          <button
+            className="iconButton collapseButton"
+            type="button"
+            onClick={toggleSidebar}
+            title={collapsed ? "展开侧栏" : "收起侧栏"}
+          >
             {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
           </button>
         </div>
 
         <nav className="appNav" aria-label="Workspace navigation">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const selected = item.key === active;
             return (
-              <Link key={item.href} className={selected ? "active" : ""} href={item.href}>
+              <Link key={item.href} className={selected ? "active" : ""} href={item.href} title={item.label}>
                 <Icon size={17} />
                 <span>{item.label}</span>
               </Link>
@@ -168,7 +199,7 @@ export function AppShell({
               </button>
             </div>
           ) : (
-            <Link className="loginLink" href={`/login?next=${encodeURIComponent(pathname)}`}>
+            <Link className="loginLink" href={`${loginPath}?next=${encodeURIComponent(pathname)}`}>
               <LogIn size={16} />
               登录
             </Link>
@@ -184,7 +215,7 @@ export function AppShell({
             icon={<LogIn size={28} />}
             title="请先登录"
             description="登录后可以进入 Chat、Trace 和 Approval 工作区。"
-            actionHref={`/login?next=${encodeURIComponent(pathname)}`}
+            actionHref={`${loginPath}?next=${encodeURIComponent(pathname)}`}
             actionLabel="前往登录"
           />
         ) : !hasRequiredRole ? (
@@ -192,6 +223,10 @@ export function AppShell({
             icon={<ShieldCheck size={28} />}
             title="当前账号权限不足"
             description="管理页面需要 CUSTOMER_SERVICE 或 ADMIN 角色。"
+            secondaryHref="/chat"
+            secondaryLabel="返回 Chat"
+            actionHref={`/admin/login?next=${encodeURIComponent(pathname)}`}
+            actionLabel="切换账号"
           />
         ) : (
           children(shellState)
@@ -207,23 +242,34 @@ function AuthState({
   description,
   actionHref,
   actionLabel,
+  secondaryHref,
+  secondaryLabel,
 }: {
   icon: ReactNode;
   title: string;
   description?: string;
   actionHref?: string;
   actionLabel?: string;
+  secondaryHref?: string;
+  secondaryLabel?: string;
 }) {
   return (
     <div className="authState">
       <div className="emptyIcon">{icon}</div>
       <h3>{title}</h3>
       {description ? <p>{description}</p> : null}
-      {actionHref && actionLabel ? (
-        <Link className="primaryLink" href={actionHref}>
-          {actionLabel}
-        </Link>
-      ) : null}
+      <div className="authActions">
+        {actionHref && actionLabel ? (
+          <Link className="primaryLink" href={actionHref}>
+            {actionLabel}
+          </Link>
+        ) : null}
+        {secondaryHref && secondaryLabel ? (
+          <Link className="secondaryLink" href={secondaryHref}>
+            {secondaryLabel}
+          </Link>
+        ) : null}
+      </div>
     </div>
   );
 }

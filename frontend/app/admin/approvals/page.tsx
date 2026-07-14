@@ -6,6 +6,14 @@ import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/app/admin/components/AdminShell";
 import { ApprovalTask, approveTask, listApprovals, rejectTask } from "@/services/api";
 
+const PAGE_SIZE = 20;
+const approvalStatuses = [
+  { label: "全部状态", value: "" },
+  { label: "待处理", value: "PENDING" },
+  { label: "已通过", value: "APPROVED" },
+  { label: "已拒绝", value: "REJECTED" },
+];
+
 export default function AdminApprovalsPage() {
   return (
     <AdminShell
@@ -31,26 +39,33 @@ function ApprovalWorkspace({
   setError: (message: string) => void;
 }) {
   const [tasks, setTasks] = useState<ApprovalTask[]>([]);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [comments, setComments] = useState<Record<number, string>>({});
 
   useEffect(() => {
     if (!isAuthed) {
       setTasks([]);
       return;
     }
-    void loadApprovals();
+    void loadApprovals(offset);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthed, token]);
+  }, [isAuthed, token, statusFilter, offset]);
 
-  async function loadApprovals() {
+  async function loadApprovals(nextOffset = offset) {
     if (!token) {
       return;
     }
     setError("");
     setLoading(true);
     try {
-      const result = await listApprovals(token);
+      const result = await listApprovals(token, {
+        status: statusFilter || undefined,
+        limit: PAGE_SIZE,
+        offset: nextOffset,
+      });
       setTasks(result);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "审批任务加载失败");
@@ -64,15 +79,31 @@ function ApprovalWorkspace({
     setProcessingId(taskId);
     try {
       if (action === "approve") {
-        await approveTask(token, taskId);
+        await approveTask(token, taskId, comments[taskId]);
       } else {
-        await rejectTask(token, taskId);
+        await rejectTask(token, taskId, comments[taskId]);
       }
-      await loadApprovals();
+      await loadApprovals(offset);
+      setComments((items) => ({ ...items, [taskId]: "" }));
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "审批操作失败");
     } finally {
       setProcessingId(null);
+    }
+  }
+
+  function handleStatusChange(value: string) {
+    setStatusFilter(value);
+    setOffset(0);
+  }
+
+  function goPrev() {
+    setOffset((value) => Math.max(value - PAGE_SIZE, 0));
+  }
+
+  function goNext() {
+    if (tasks.length === PAGE_SIZE) {
+      setOffset((value) => value + PAGE_SIZE);
     }
   }
 
@@ -90,14 +121,33 @@ function ApprovalWorkspace({
   return (
     <div className="adminGrid">
       <div className="adminMetrics">
-        <Metric label="待处理" value={String(summary.pending)} tone={summary.pending ? "danger" : ""} />
-        <Metric label="已通过" value={String(summary.approved)} tone="success" />
-        <Metric label="已拒绝" value={String(summary.rejected)} />
-        <Metric label="总任务" value={String(tasks.length)} />
+        <Metric label="本页待处理" value={String(summary.pending)} tone={summary.pending ? "danger" : ""} />
+        <Metric label="本页已通过" value={String(summary.approved)} tone="success" />
+        <Metric label="本页已拒绝" value={String(summary.rejected)} />
+        <Metric label="本页任务" value={String(tasks.length)} />
       </div>
 
       <div className="adminToolbar">
-        <button type="button" onClick={loadApprovals} disabled={loading}>
+        <label className="filterGroup">
+          <span>状态</span>
+          <select value={statusFilter} onChange={(event) => handleStatusChange(event.target.value)}>
+            {approvalStatuses.map((status) => (
+              <option key={status.value || "all"} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="pager">
+          <button type="button" onClick={goPrev} disabled={loading || offset === 0}>
+            上一页
+          </button>
+          <span>{Math.floor(offset / PAGE_SIZE) + 1}</span>
+          <button type="button" onClick={goNext} disabled={loading || tasks.length < PAGE_SIZE}>
+            下一页
+          </button>
+        </div>
+        <button type="button" onClick={() => loadApprovals(offset)} disabled={loading}>
           <RefreshCw size={16} />
           {loading ? "刷新中" : "刷新"}
         </button>
@@ -106,9 +156,10 @@ function ApprovalWorkspace({
       <section className="approvalTable">
         <div className="approvalHeader">
           <span>任务</span>
+          <span>退款信息</span>
           <span>风险</span>
           <span>状态</span>
-          <span>创建时间</span>
+          <span>备注</span>
           <span>操作</span>
         </div>
         {tasks.length === 0 ? (
@@ -119,6 +170,8 @@ function ApprovalWorkspace({
               key={task.id}
               task={task}
               processing={processingId === task.id}
+              comment={comments[task.id] ?? ""}
+              onCommentChange={(value) => setComments((items) => ({ ...items, [task.id]: value }))}
               onAction={handleAction}
             />
           ))
@@ -131,10 +184,14 @@ function ApprovalWorkspace({
 function ApprovalRow({
   task,
   processing,
+  comment,
+  onCommentChange,
   onAction,
 }: {
   task: ApprovalTask;
   processing: boolean;
+  comment: string;
+  onCommentChange: (value: string) => void;
   onAction: (taskId: number, action: "approve" | "reject") => void;
 }) {
   const disabled = task.status !== "PENDING" || processing;
@@ -143,12 +200,31 @@ function ApprovalRow({
       <div>
         <strong>#{task.id}</strong>
         <span>
-          {task.type} · refund #{task.target_id}
+          {task.type} · {formatDate(task.created_at)}
         </span>
+        <span>申请人：{task.username ?? "-"}</span>
+      </div>
+      <div>
+        <strong>{task.order_no ?? `订单 #${task.order_id ?? "-"}`}</strong>
+        <span>金额：{formatMoney(task.refund_amount)}</span>
+        <span>原因：{task.refund_reason ?? "-"}</span>
       </div>
       <RiskBadge risk={task.risk_level} />
       <StatusBadge status={task.status} />
-      <span className="mutedText">{formatDate(task.created_at)}</span>
+      {task.status === "PENDING" ? (
+        <textarea
+          className="approvalComment"
+          value={comment}
+          onChange={(event) => onCommentChange(event.target.value)}
+          placeholder="处理备注"
+          rows={2}
+        />
+      ) : (
+        <span className="mutedText">
+          {task.comment || "无备注"}
+          {task.operator_username ? ` · ${task.operator_username}` : ""}
+        </span>
+      )}
       <div className="approvalActions">
         <button type="button" disabled={disabled} onClick={() => onAction(task.id, "approve")}>
           <CheckCircle2 size={15} />
@@ -211,4 +287,15 @@ function formatDate(value?: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatMoney(value?: number | null) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    maximumFractionDigits: 2,
+  }).format(value);
 }

@@ -1,11 +1,18 @@
 "use client";
 
 import { AlertCircle, CheckCircle2, Clock3, RefreshCw, Route } from "lucide-react";
-import { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 
 import { AdminShell } from "@/app/admin/components/AdminShell";
-import { getTrace, listTraces, TraceRun, TraceStep } from "@/services/api";
+import { getTrace, listTraces, ToolLog, TraceRun, TraceStep } from "@/services/api";
+
+const PAGE_SIZE = 20;
+const traceStatuses = [
+  { label: "全部状态", value: "" },
+  { label: "已完成", value: "COMPLETED" },
+  { label: "有警告", value: "COMPLETED_WITH_WARNINGS" },
+  { label: "运行中", value: "RUNNING" },
+];
 
 export default function AdminTracesPage() {
   return (
@@ -14,6 +21,7 @@ export default function AdminTracesPage() {
       eyebrow="Agent 可观测"
       title="Trace"
       description="查看最近的 Agent Run、节点耗时、意图识别和工具执行上下文。"
+      requiredRole="ADMIN"
     >
       {({ token, isAuthed, setError }) => (
         <TraceWorkspace token={token} isAuthed={isAuthed} setError={setError} />
@@ -33,6 +41,8 @@ function TraceWorkspace({
 }) {
   const [runs, setRuns] = useState<TraceRun[]>([]);
   const [selectedRun, setSelectedRun] = useState<TraceRun | null>(null);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -41,24 +51,24 @@ function TraceWorkspace({
       setSelectedRun(null);
       return;
     }
-    void loadRuns();
+    void loadRuns(offset);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthed, token]);
+  }, [isAuthed, token, statusFilter, offset]);
 
-  async function loadRuns() {
+  async function loadRuns(nextOffset = offset) {
     if (!token) {
       return;
     }
     setError("");
     setLoading(true);
     try {
-      const result = await listTraces(token);
+      const result = await listTraces(token, {
+        status: statusFilter || undefined,
+        limit: PAGE_SIZE,
+        offset: nextOffset,
+      });
       setRuns(result);
-      if (result.length > 0) {
-        setSelectedRun(result[0]);
-      } else {
-        setSelectedRun(null);
-      }
+      setSelectedRun(result[0] ?? null);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Trace 加载失败");
     } finally {
@@ -73,6 +83,21 @@ function TraceWorkspace({
       setSelectedRun(result);
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Trace 详情加载失败");
+    }
+  }
+
+  function handleStatusChange(value: string) {
+    setStatusFilter(value);
+    setOffset(0);
+  }
+
+  function goPrev() {
+    setOffset((value) => Math.max(value - PAGE_SIZE, 0));
+  }
+
+  function goNext() {
+    if (runs.length === PAGE_SIZE) {
+      setOffset((value) => value + PAGE_SIZE);
     }
   }
 
@@ -95,14 +120,33 @@ function TraceWorkspace({
   return (
     <div className="adminGrid">
       <div className="adminMetrics">
-        <Metric label="Run 数" value={String(runs.length)} />
+        <Metric label="本页 Run" value={String(runs.length)} />
         <Metric label="成功" value={String(summary.successCount)} tone="success" />
         <Metric label="需关注" value={String(summary.failedCount)} tone={summary.failedCount ? "danger" : ""} />
         <Metric label="平均耗时" value={`${summary.avgLatency} ms`} />
       </div>
 
       <div className="adminToolbar">
-        <button type="button" onClick={loadRuns} disabled={loading}>
+        <label className="filterGroup">
+          <span>状态</span>
+          <select value={statusFilter} onChange={(event) => handleStatusChange(event.target.value)}>
+            {traceStatuses.map((status) => (
+              <option key={status.value || "all"} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="pager">
+          <button type="button" onClick={goPrev} disabled={loading || offset === 0}>
+            上一页
+          </button>
+          <span>{Math.floor(offset / PAGE_SIZE) + 1}</span>
+          <button type="button" onClick={goNext} disabled={loading || runs.length < PAGE_SIZE}>
+            下一页
+          </button>
+        </div>
+        <button type="button" onClick={() => loadRuns(offset)} disabled={loading}>
           <RefreshCw size={16} />
           {loading ? "刷新中" : "刷新"}
         </button>
@@ -140,6 +184,9 @@ function TraceWorkspace({
 }
 
 function TraceDetail({ run }: { run: TraceRun }) {
+  const steps = run.steps ?? [];
+  const toolLogs = run.tool_logs ?? [];
+
   return (
     <div className="detailStack">
       <div className="detailHeader">
@@ -158,14 +205,25 @@ function TraceDetail({ run }: { run: TraceRun }) {
           {run.latency_ms ?? 0} ms
         </span>
         <span>confidence {formatConfidence(run.confidence)}</span>
-        <span>{run.steps.length} steps</span>
+        <span>{steps.length} steps</span>
+        <span>{toolLogs.length} tools</span>
+      </div>
+      {run.error_message ? <div className="traceError">{run.error_message}</div> : null}
+
+      <div className="stepList">
+        {steps.length === 0 ? (
+          <AdminEmpty icon={<Route size={22} />} title="暂无节点记录" compact />
+        ) : (
+          steps.map((step) => <TraceStepCard key={step.id} step={step} />)
+        )}
       </div>
 
       <div className="stepList">
-        {run.steps.length === 0 ? (
-          <AdminEmpty icon={<Route size={22} />} title="暂无节点记录" compact />
+        <div className="subsectionTitle">Tool Logs</div>
+        {toolLogs.length === 0 ? (
+          <AdminEmpty icon={<Route size={22} />} title="暂无工具调用记录" compact />
         ) : (
-          run.steps.map((step) => <TraceStepCard key={step.id} step={step} />)
+          toolLogs.map((log) => <ToolLogCard key={log.id} log={log} />)
         )}
       </div>
     </div>
@@ -179,9 +237,28 @@ function TraceStepCard({ step }: { step: TraceStep }) {
         <strong>{step.node_name}</strong>
         <span>{step.duration_ms ?? 0} ms</span>
       </div>
+      {step.error_message ? <div className="traceError inline">{step.error_message}</div> : null}
       <div className="jsonGrid">
         <JsonPanel title="Input" data={step.input_data} />
         <JsonPanel title="Output" data={step.output_data} />
+      </div>
+    </article>
+  );
+}
+
+function ToolLogCard({ log }: { log: ToolLog }) {
+  return (
+    <article className="stepCard">
+      <div className="stepHeader">
+        <strong>{log.tool_name}</strong>
+        <span>
+          {log.status} · {log.latency_ms ?? 0} ms
+        </span>
+      </div>
+      {log.error_message ? <div className="traceError inline">{log.error_message}</div> : null}
+      <div className="jsonGrid">
+        <JsonPanel title="Input" data={log.input_data} />
+        <JsonPanel title="Output" data={log.output_data} />
       </div>
     </article>
   );

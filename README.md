@@ -73,11 +73,12 @@ npm.cmd run dev
 访问：
 
 - Login：`http://localhost:3000/login`
+- Admin Login：`http://localhost:3000/admin/login`
 - Chat：`http://localhost:3000/chat`
 - Trace：`http://localhost:3000/admin/traces`
 - Approval：`http://localhost:3000/admin/approvals`
 
-默认 API 地址为 `http://localhost:8000`，可通过 `NEXT_PUBLIC_API_BASE_URL` 覆盖。登录后左侧工作区导航可在 Chat、Trace、Approval 之间切换，侧栏支持折叠，右上角显示当前账号头像、用户 id 和角色。
+默认 API 地址为 `http://localhost:8000`，可通过 `NEXT_PUBLIC_API_BASE_URL` 覆盖。普通用户使用 `/login` 进入 Chat，客服/管理员使用 `/admin/login` 进入管理端。登录后左侧工作区导航可按角色在 Chat、Trace、Approval 之间切换，侧栏支持折叠，右上角显示当前账号头像、用户 id 和角色。
 
 ## 项目结构
 
